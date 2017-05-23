@@ -70,12 +70,20 @@ let result = async {
         return getEpisodes drwho.data.[0]
     }
 
+let ticker = async {
+    for x in [ 1 .. 200 ] do
+        let! s = Async.Sleep(10)
+        printfn "slept 10ms!"
+}
+
 let printEpisodes = async {
         let! loggedIn = login
         token <- loggedIn
+        Async.Start(ticker)
         let! drwho = searchShow "Doctor Who (2005)"
         let! episodes = getEpisodes drwho.data.[0]
-        printfn "%A" episodes
+        for e in episodes.data do
+            printfn "episode: %A %s" e.absoluteNumber e.episodeName
     }
 
 Async.Start printEpisodes
