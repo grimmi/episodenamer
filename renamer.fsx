@@ -1,4 +1,4 @@
-#r "packages/Newtonsoft.Json/lib/net45/Newtonsoft.Json.dll"
+#r "packages/Newtonsoft.Json/lib/netstandard1.3/Newtonsoft.Json.dll"
 
 let mutable apikey = ""
 let mutable user = ""
@@ -28,12 +28,13 @@ open Newtonsoft.Json
 let apiUrl = "https://api.thetvdb.com"
 
 let login =
-    use client = new WebClient()
-    let body = "{\"apikey\":\"" + apikey + "\", \"username\":\"" + user + "\", \"userkey\":\"" + userkey + "\"}" 
-    client.Headers.Set("Content-Type", "application/json")
-    let response = client.UploadData(apiUrl + "/login", "POST",  body |> Encoding.UTF8.GetBytes)
-
-    JObject.Parse(Encoding.UTF8.GetString response)
+    let tokenResponse = async {
+        use client = new WebClient()
+        let body = "{\"apikey\":\"" + apikey + "\", \"username\":\"" + user + "\", \"userkey\":\"" + userkey + "\"}" 
+        client.Headers.Set("Content-Type", "application/json")
+        let! response = client.UploadDataTaskAsync(apiUrl + "/login", "POST",  body |> Encoding.UTF8.GetBytes) |> Async.AwaitTask
+        return JObject.Parse(Encoding.UTF8.GetString response) } 
+    tokenResponse |> Async.RunSynchronously
 
 let token = login.["token"] |> string
 
@@ -47,11 +48,14 @@ let getAuthorizedClient t =
 type Show = { aliases: string[]; id: int; seriesName: string }
 type SearchResponse = { data: Show[] }
 
-let searchShow show =
-    let client = getAuthorizedClient token
-    let response = client.DownloadString(apiUrl + "/search/series?name=" + show)
+let searchShow show = 
+    let result = async {
+        let client = getAuthorizedClient token
+        let! response = client.AsyncDownloadString(Uri(apiUrl + "/search/series?name=" + show))
 
-    JsonConvert.DeserializeObject<SearchResponse>(response)
+        return JsonConvert.DeserializeObject<SearchResponse>(response) }
+    result |> Async.RunSynchronously
+
 
 let drwho = searchShow "Doctor Who (2005)"
 printfn "%s" (drwho |> string)
@@ -61,10 +65,12 @@ type Episode = { absoluteNumber: Nullable<int>; airedEpisodeNumber: Nullable<int
 type EpisodeResult = { data: Episode[] }
 
 let getEpisodes show = 
-    let client = getAuthorizedClient token
-    let response = client.DownloadString(apiUrl + "/series/" + (show.id |> string) + "/episodes")
+    let result = async {
+        let client = getAuthorizedClient token
+        let! response = client.AsyncDownloadString(new Uri(apiUrl + "/series/" + (show.id |> string) + "/episodes"))
 
-    JsonConvert.DeserializeObject<EpisodeResult>(response)
+        return JsonConvert.DeserializeObject<EpisodeResult>(response) }
+    result |> Async.RunSynchronously
 
 let whoepisodes = getEpisodes drwho.data.[0]
 printfn "%A" whoepisodes
