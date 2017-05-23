@@ -23,6 +23,7 @@ readcredentials
 open System.Net
 open System.Text
 open Newtonsoft.Json.Linq
+open Newtonsoft.Json
 
 let apiUrl = "https://api.thetvdb.com"
 
@@ -36,19 +37,34 @@ let login =
 
 let token = login.["token"] |> string
 
-printfn "%A" token
-
 let getAuthorizedClient t =
     let client = new WebClient()
     client.Headers.Set("Content-Type", "application/json")
     client.Headers.Set("Authorization", "Bearer " + t)
+    client.Headers.Set("Accept-Language", "en")
     client
+
+type Show = { aliases: string[]; id: int; seriesName: string }
+type SearchResponse = { data: Show[] }
 
 let searchShow show =
     let client = getAuthorizedClient token
     let response = client.DownloadString(apiUrl + "/search/series?name=" + show)
 
-    JObject.Parse(response)
+    JsonConvert.DeserializeObject<SearchResponse>(response)
 
-let castle = searchShow "Castle"
-printfn "%s" (castle |> string)
+let drwho = searchShow "Doctor Who (2005)"
+printfn "%s" (drwho |> string)
+
+type Links = { first: Nullable<int>; last: Nullable<int>; next: Nullable<int>; prev: Nullable<int> }
+type Episode = { absoluteNumber: Nullable<int>; airedEpisodeNumber: Nullable<int>; airedSeason: Nullable<int>; episodeName: string; firstAired: string }
+type EpisodeResult = { data: Episode[] }
+
+let getEpisodes show = 
+    let client = getAuthorizedClient token
+    let response = client.DownloadString(apiUrl + "/series/" + (show.id |> string) + "/episodes")
+
+    JsonConvert.DeserializeObject<EpisodeResult>(response)
+
+let whoepisodes = getEpisodes drwho.data.[0]
+printfn "%A" whoepisodes
