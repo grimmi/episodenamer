@@ -25,11 +25,11 @@ let apiUrl = "https://api.thetvdb.com"
 
 let login =
     use client = new WebClient()
-    let body = "{'apikey':'" + apikey + ", 'username':'" + user + "', 'userkey':'" + userkey + "'}" |> Encoding.UTF8.GetBytes
-    
+    let body = "{\"apikey\":\"" + apikey + "\", \"username\":\"" + user + "\", \"userkey\":\"" + userkey + "\"}" 
+    printfn "body: %s" body
     client.Headers.Set("Content-Type", "application/json")
-    let response = client.UploadData(apiUrl + "/login", "POST",  body)
+    let response = client.UploadData(apiUrl + "/login", "POST",  body |> Encoding.UTF8.GetBytes)
 
     System.Text.Encoding.UTF8.GetString response
 
-login
+let token = login
