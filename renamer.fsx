@@ -1,7 +1,8 @@
-#r "packages/Newtonsoft.Json/lib/netstandard1.3/Newtonsoft.Json.dll"
+#r "packages/Newtonsoft.Json/lib/net45/Newtonsoft.Json.dll"
 
 
 open System
+open System.Globalization
 open System.IO
 open System.Net
 open System.Text
@@ -54,7 +55,6 @@ let getAuthorizedClient t =
 let searchShow show = async {
         let client = getAuthorizedClient token
         let! response = client.AsyncDownloadString(Uri(apiUrl + "/search/series?name=" + show))
-
         return JsonConvert.DeserializeObject<SearchResponse>(response) }
 
 let getEpisodes show = async {
@@ -63,27 +63,61 @@ let getEpisodes show = async {
 
         return JsonConvert.DeserializeObject<EpisodeResult>(response) }
 
-let result = async {
-        let! loggedIn = login
-        token <- loggedIn
-        let! drwho = searchShow "Doctor Who (2005)"
-        return getEpisodes drwho.data.[0]
-    }
+let file = "Doctor_Who_17.05.13_19-15_ukbbc_45_TVOON_DE.mpg.HQ.avi"
 
-let ticker = async {
-    for x in [ 1 .. 200 ] do
-        let! s = Async.Sleep(10)
-        printfn "slept 10ms!"
+let parseShow (f:string) = 
+    let showPart = f 
+                   |> Seq.takeWhile(fun c -> not (Char.IsDigit c)) 
+                   |> Array.ofSeq
+                   |> System.String
+    let cleanShow = showPart.Replace("_", " ").Trim()
+    cleanShow
+
+let parseDate (f:string) =
+    let datePart = f
+                   |> Seq.skipWhile(fun c -> not (Char.IsDigit c))
+                   |> Seq.takeWhile(fun c -> Char.IsDigit c || c = '_' || c = '-' || c = '.')
+                   |> Array.ofSeq |> System.String
+    let date = DateTime.ParseExact(datePart, "yy.MM.dd_HH-mm_", null)
+    date.Date
+
+let d = parseDate file
+
+// let printEpisodes = async {
+//         let! loggedIn = login
+//         token <- loggedIn
+//         Async.Start(ticker)
+//         let! drwho = searchShow "Doctor Who (2005)"
+//         let! episodes = getEpisodes drwho.data.[0]
+//         for e in episodes.data do
+//             printfn "episode: %A %s" e.absoluteNumber e.episodeName
+//     }
+
+
+let choose (options: (int*string) seq) =
+    options
+    |> Seq.iter(fun (idx, desc) -> printfn "[%d]: %s" idx desc)
+    printf "Which option? "
+    let input = Console.ReadLine()
+    // printfn "your choice: %s" input
+    // input |> int
+    9
+
+let findEpisodes = async {
+    let! loggedIn = login
+    token <- loggedIn
+    let! show = searchShow (file |> parseShow)
+    let date = parseDate file
+    let chosenIdx = choose (show.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
+    let searchedShow = show.data.[chosenIdx]
+    printfn "SEARCHED SHOW: %A" searchedShow
+    let! episodes = getEpisodes searchedShow
+    let matchingEpisode = episodes.data |> Seq.tryFind(fun e -> 
+        not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = date)
+
+    match matchingEpisode with
+    |None -> printfn "No episode found!"
+    |Some episode -> printfn "episode found: %s" episode.episodeName
 }
 
-let printEpisodes = async {
-        let! loggedIn = login
-        token <- loggedIn
-        Async.Start(ticker)
-        let! drwho = searchShow "Doctor Who (2005)"
-        let! episodes = getEpisodes drwho.data.[0]
-        for e in episodes.data do
-            printfn "episode: %A %s" e.absoluteNumber e.episodeName
-    }
-
-Async.Start printEpisodes
+Async.Start findEpisodes
