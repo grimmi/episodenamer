@@ -153,7 +153,11 @@ let findEpisode file = async {
     match show with
     |None -> printfn "Keine Show gefunden!"
     |Some s ->  let! episode = matchEpisode s file
-                printfn "gefundene Episode: %A" episode
+                match episode with
+                | None -> printfn "Episode konnte nicht zugeordnet werden"
+                | Some ep -> 
+                    let info = sprintf "%s %dx%d %s" s.seriesName ep.airedSeason.Value ep.airedEpisodeNumber.Value ep.episodeName
+                    printfn "%s" info
 }
 
 for ep in files do

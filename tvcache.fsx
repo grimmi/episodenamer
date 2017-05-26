@@ -9,6 +9,12 @@ open Types
 let private showMap = Dictionary<string, Show>()
 let private showEpisodes = Dictionary<Show, Episode seq>()
 
+let tryGetShow show = showMap.TryGetValue show
+let tryGetEpisodes show = showEpisodes.TryGetValue show
+
+let cacheEpisodes episodes show = 
+    showEpisodes.[show] <- episodes
+
 let deserializeShow (line: string) = 
     let parts = line.Split([|"->"|], StringSplitOptions.RemoveEmptyEntries)
     let parsedName = parts.[0].Trim()
