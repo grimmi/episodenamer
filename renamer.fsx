@@ -63,9 +63,10 @@ let getEpisodes show = async {
 
         return JsonConvert.DeserializeObject<EpisodeResult>(response) }
 
-let files = [|"The_Simpsons__Dogtown_17.05.21_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
-                 "The_Simpsons__Moho_House_17.05.07_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
-                 "Doctor_Who_17.05.06_19-20_ukbbc_45_TVOON_DE.mpg.HQ.avi" |]
+let files = [|  "Marvel_s_Agents_of_S_H_I_E_L_D___The_Bridge_13.12.10_20-00_uswabc_61_TVOON_DE.mpg.HQ.avi";
+                "The_Simpsons__Dogtown_17.05.21_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
+                "The_Simpsons__Moho_House_17.05.07_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
+                "Doctor_Who_17.05.06_19-20_ukbbc_45_TVOON_DE.mpg.HQ.avi" |]
 let parseShowName (file:string) = 
     if file.IndexOf "__" <> -1 then
         match file.Split([|"__"|], StringSplitOptions.RemoveEmptyEntries) with
@@ -107,30 +108,46 @@ let choose (options: (int*string) seq) =
 let canonizeEpisode (episode:string) = 
     (episode |> String.filter(Char.IsLetter)).ToLower()
 
-let findEpisodes file = async {
+let matchEpisode show file = async{
+    let date = parseDate file
+    let! episodes = getEpisodes show
+    let episodeName = parseEpisodeName file
+    let matchingEpisode = episodes.data |> Seq.tryFind(fun e -> 
+        match (episodeName, date) with
+        |(None, Some d) -> not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = d
+        |(Some n, _) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
+        |_ -> false)
+
+    return matchingEpisode
+}
+
+let rec findShow showName = async {
+    try
+        match showName with 
+        |None -> return None
+        |Some name -> let! shows = searchShow name
+                      let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
+                      return Some(shows.data.[chosenIdx])
+    with
+        | :? WebException as ex ->  printfn "Unbekannte Show, bitte Namen eingeben:"
+                                    let newShowName = Console.ReadLine()
+                                    if newShowName <> "x" then
+                                        let! nextShow = findShow(Some(newShowName))
+                                        return nextShow
+                                    else
+                                        return None
+}
+
+let findEpisode file = async {
     let! loggedIn = login
     token <- loggedIn
-    let showName = file |> parseShowName
-    match showName with
-    |Some name ->
-        let! shows = searchShow name
-        let date = parseDate file
-        let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
-        let searchedShow = shows.data.[chosenIdx]
-        printfn "SEARCHED SHOW: %A" searchedShow.seriesName
-        let! episodes = getEpisodes searchedShow
-        let episodeName = parseEpisodeName file
-        let matchingEpisode = episodes.data |> Seq.tryFind(fun e -> 
-            match (episodeName, date) with
-            |(None, Some d) -> not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = d
-            |(Some n, _) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
-            |_ -> false)
-
-        match matchingEpisode with
-        |None -> printfn "No episode found!"
-        |Some episode -> printfn "episode found: %s" episode.episodeName
-    |_ -> printfn "Konnte keinen Shownamen ermitteln"
+    let parsedName = file |> parseShowName
+    let! show = findShow parsedName
+    match show with
+    |None -> printfn "Keine Show gefunden!"
+    |Some s ->  let! episode = matchEpisode s file
+                printfn "gefundene Episode: %A" episode
 }
 
 for ep in files do
-    findEpisodes ep |> Async.RunSynchronously
+    findEpisode ep |> Async.RunSynchronously
