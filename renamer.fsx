@@ -1,5 +1,7 @@
 #r "packages/Newtonsoft.Json/lib/net45/Newtonsoft.Json.dll"
-
+#load "showparser.fsx"
+#load "types.fsx"
+#load "tvcache.fsx"
 
 open System
 open System.Collections.Generic
@@ -9,20 +11,16 @@ open System.Net
 open System.Text
 open Newtonsoft.Json.Linq
 open Newtonsoft.Json
+
+open TvCache
+open Parser
+open Types
+
 let mutable apikey = ""
 let mutable user = ""
 let mutable userkey = ""
-
 let mutable token = ""
 
-type Show = { aliases: string[]; id: int; seriesName: string }
-type SearchResponse = { data: Show[] }
-type Links = { first: Nullable<int>; last: Nullable<int>; next: Nullable<int>; prev: Nullable<int> }
-type Episode = { absoluteNumber: Nullable<int>; airedEpisodeNumber: Nullable<int>; airedSeason: Nullable<int>; episodeName: string; firstAired: string }
-type EpisodeResult = { links: Links; data: Episode[] }
-
-let showMap = Dictionary<string, Show>()
-let showEpisodes = Dictionary<Show, Episode seq>()
 
 let extractValue (line:string) = 
     (line.Split '=').[1].Trim()
@@ -36,7 +34,6 @@ let readcredentials =
     |_ -> raise (Exception "invalid configuration")
 
 readcredentials
-
 
 let apiUrl = "https://api.thetvdb.com"
 
@@ -69,7 +66,7 @@ let getEpisodePage show page = async{
 }
 
 let getEpisodes show = async {
-        match showEpisodes.TryGetValue show with
+        match tryGetEpisodes show with
         |true, episodes -> return episodes
         |_ ->   let! firstPage = getEpisodePage show 1
                 if firstPage.links.last.HasValue && firstPage.links.last.Value > 1 then
@@ -77,10 +74,10 @@ let getEpisodes show = async {
                                                 |> Seq.collect(fun page ->  let pageResult = (getEpisodePage show page) |> Async.RunSynchronously
                                                                             pageResult.data)
                     let episodes = Seq.concat [firstPage.data; additionalEpisodes |> Array.ofSeq]
-                    showEpisodes.[show] <- episodes
+                    show |> cacheEpisodes episodes
                     return episodes
                 else
-                    showEpisodes.[show] <- firstPage.data
+                    show |> cacheEpisodes firstPage.data
                     return firstPage.data |> Seq.ofArray
 }
 
@@ -88,35 +85,6 @@ let files = [|  "Marvel_s_Agents_of_S_H_I_E_L_D___The_Bridge_13.12.10_20-00_uswa
                 "The_Simpsons__Dogtown_17.05.21_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
                 "The_Simpsons__Moho_House_17.05.07_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
                 "Doctor_Who_17.05.06_19-20_ukbbc_45_TVOON_DE.mpg.HQ.avi" |]
-let parseShowName (file:string) = 
-    if file.IndexOf "__" <> -1 then
-        match file.Split([|"__"|], StringSplitOptions.RemoveEmptyEntries) with
-        |[|show;_|] -> Some(show.Replace("_", " " ))
-        |_ -> None
-    else
-        let pointIdx = file.IndexOf '.'
-        Some(file.Substring(0, pointIdx - 3).Replace("_", " "))
-
-let parseEpisodeName (file:string) = 
-    let pointIdx = file.IndexOf '.'
-    let dblUnderscoreIdx = file.IndexOf "__"
-
-    if pointIdx = -1 || dblUnderscoreIdx = -1 then
-        None
-    else
-        let length = (pointIdx - 3) - (dblUnderscoreIdx + 2)
-        match length with
-        |_ when length > 0 -> Some(file.Substring(dblUnderscoreIdx + 2, length).Replace("_", " "))
-        |_ -> None
-
-let parseDate (file:string) = 
-    let pointIdx = file.IndexOf '.'
-    match pointIdx with
-    |(-1) -> None
-    |_ -> 
-        let datePart = file.Substring(pointIdx - 2, 8)
-        Some(DateTime.ParseExact(datePart, "yy.MM.dd", null))
-
 
 let choose (options: (int*string) seq) =
     match options with
@@ -148,30 +116,11 @@ let matchEpisode show file = async{
     return matchingEpisode
 }
 
-let deserializeShow (line: string) = 
-    let parts = line.Split([|"->"|], StringSplitOptions.RemoveEmptyEntries)
-    let parsedName = parts.[0].Trim()
-    let values = parts.[1].Split([|"***"|], StringSplitOptions.RemoveEmptyEntries)
-    (parsedName, { id = values.[1].Trim() |> int; seriesName = values.[0].Trim(); aliases = [|""|]})
-
-
-let fillShowCache =
-    File.ReadAllLines("./shows.map")
-    |> Seq.filter(fun line -> line |> String.length > 0)
-    |> Seq.map deserializeShow
-    |> Seq.iter(fun (key, show) -> showMap.[key] <- show)
-
-let cacheShow parsedName foundShow = 
-    showMap.[parsedName] <- foundShow
-    let mapping = sprintf "%s -> %s *** %d" parsedName foundShow.seriesName foundShow.id
-    if not (File.ReadAllLines("./shows.map") |> Seq.exists(fun line -> line = mapping)) then
-        File.AppendAllText("./shows.map", Environment.NewLine + mapping)
-
 let rec findShow showName =
 
     let rec findShowInDb original current = async{
         try
-            match showMap.TryGetValue current with
+            match tryGetShow current with
             |true, mappedShow -> 
                             printfn "Nehme Show aus Cache: %s" mappedShow.seriesName
                             return Some(mappedShow)

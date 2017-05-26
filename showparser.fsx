@@ -1,3 +1,5 @@
+module Parser
+
 open System
 
 let examples = [|"The_Simpsons__Dogtown_17.05.21_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
@@ -12,7 +14,7 @@ let parseShowName (file:string) =
         |_ -> None
     else
         let pointIdx = file.IndexOf '.'
-        Some(file.Substring(0, pointIdx - 3).Replace("_", " ").Trim())
+        Some(file.Substring(0, pointIdx - 3).Replace("_", " "))
 
 let parseEpisodeName (file:string) = 
     let pointIdx = file.IndexOf '.'
@@ -23,7 +25,7 @@ let parseEpisodeName (file:string) =
     else
         let length = (pointIdx - 3) - (dblUnderscoreIdx + 2)
         match length with
-        |_ when length > 0 -> Some(file.Substring(dblUnderscoreIdx + 2, length).Replace("_", " ").Trim())
+        |_ when length > 0 -> Some(file.Substring(dblUnderscoreIdx + 2, length).Replace("_", " "))
         |_ -> None
 
 let parseDate (file:string) = 
