@@ -3,6 +3,8 @@
 #load "showparser.fsx"
 #load "types.fsx"
 #load "tvcache.fsx"
+#load "episodes.fsx"
+#load "framework.fsx"
 
 open System
 open System.Collections.Generic
@@ -17,86 +19,14 @@ open TvCache
 open Parser
 open Types
 open OtrBatchDecoder
+open Episodes
+open Framework
 
-let mutable apikey = ""
-let mutable user = ""
-let mutable userkey = ""
-let mutable token = ""
-
-
-let extractValue (line:string) = 
-    (line.Split '=').[1].Trim()
-
-let readcredentials = 
-    match File.ReadAllLines("./credentials.cred") |> Array.take 3 with
-    |[|keyline;userline;pwline|] ->
-        apikey <- keyline |> extractValue
-        user <- userline |> extractValue
-        userkey <- pwline |> extractValue
-    |_ -> raise (Exception "invalid configuration")
-
-readcredentials
-
-let apiUrl = "https://api.thetvdb.com"
-
-let login = async {
-        use client = new WebClient()
-        let body = "{\"apikey\":\"" + apikey + "\", \"username\":\"" + user + "\", \"userkey\":\"" + userkey + "\"}" 
-        client.Headers.Set("Content-Type", "application/json")
-        let! response = client.UploadDataTaskAsync(apiUrl + "/login", "POST",  body |> Encoding.UTF8.GetBytes) |> Async.AwaitTask
-        let jsonToken = JObject.Parse(Encoding.UTF8.GetString response)
-        return jsonToken.["token"] |> string }     
-
-let getAuthorizedClient t =
-    let client = new WebClient()
-    client.Headers.Set("Content-Type", "application/json")
-    client.Headers.Set("Authorization", "Bearer " + t)
-    client.Headers.Set("Accept-Language", "en")
-    client
 
 let searchShow show = async {
             let client = getAuthorizedClient token
             let! response = client.AsyncDownloadString(Uri(apiUrl + "/search/series?name=" + show))
             return JsonConvert.DeserializeObject<SearchResponse>(response) }
-
-let getEpisodePage show page = async{
-    printfn "lade Seite %d von '%s'" page show.seriesName
-    let client = getAuthorizedClient token
-    let! response = client.AsyncDownloadString(Uri(apiUrl + "/series/" + (show.id |> string) + "/episodes?page=" + (page |> string)))
-    let episodeResponse = JsonConvert.DeserializeObject<EpisodeResult>(response)
-
-    return episodeResponse
-}
-
-let downloadEpisodes show = async {
-    let! firstPage = getEpisodePage show 1
-    if firstPage.links.last.HasValue && firstPage.links.last.Value > 1 then
-        let additionalEpisodes =    [ 2 .. firstPage.links.last.Value ]
-                                    |> Seq.collect(fun page ->  let pageResult = (getEpisodePage show page) |> Async.RunSynchronously
-                                                                pageResult.data)
-        let episodes = Seq.concat [firstPage.data; additionalEpisodes |> Array.ofSeq]
-        show |> cacheEpisodes episodes
-        return episodes
-     else
-        show |> cacheEpisodes firstPage.data
-        return firstPage.data |> Seq.ofArray
-}
-
-let getEpisodes show date = async {
-        match tryGetEpisodes show with
-        |true, episodes -> 
-                let maxDate = episodes |> Seq.map(fun ep -> match DateTime.TryParse ep.firstAired with
-                                                            |(true, d) -> d
-                                                            |(false, _) -> DateTime.MinValue)
-                                       |> Seq.max
-                if maxDate < date then
-                    let! eps = downloadEpisodes show
-                    return eps
-                else
-                    return episodes
-        |_ ->   let! episodes = downloadEpisodes show
-                return episodes
-}
 
 let choose (options: (int*string) seq) =
     match options with
@@ -109,24 +39,6 @@ let choose (options: (int*string) seq) =
             let input = Console.ReadLine()    
             printfn "your choice: %s" input
             input |> int
-
-let canonizeEpisode (episode:string) = 
-    (episode |> String.filter(Char.IsLetter)).ToLower()
-
-let matchEpisode show file = async{
-    let date = parseDate file
-    let! episodes = getEpisodes show date.Value
-    let episodeName = parseEpisodeName file
-    let matchingEpisode = episodes |> Seq.tryFind(fun e -> 
-        match (episodeName, date) with
-        |(None, Some d) -> not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = d
-        |(Some n, Some d) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
-                             || not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = d
-        |(Some n, None) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
-        |(None, None) -> false)
-
-    return matchingEpisode
-}
 
 let rec findShow showName =
 
@@ -158,8 +70,6 @@ let rec findShow showName =
 
 let findEpisode file postprocess = async {
     fillShowCache
-    let! loggedIn = login
-    token <- loggedIn
     let parsedName = file |> parseShowName
     let! show = findShow parsedName
     match show with
@@ -204,6 +114,7 @@ let postCopy = move target
 
 // let files = decoded
 
+login
 let files = Directory.GetFiles(@"z:\downloads\fstest", "*.otrkey")
 
 for ep in files |> Seq.sort do
