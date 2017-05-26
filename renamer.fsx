@@ -93,7 +93,7 @@ let move newdir file show ep =
     let validName = epName |> String.filter(fun c -> (Path.GetInvalidFileNameChars() |> Seq.contains c))
     let newPath = Path.Combine(newdir, epName + ".avi")
     printfn "copying '%s' to '%s'" file newPath
-    // File.Copy(file, newPath, true)
+    File.Copy(file, newPath, true)
 
 let postCopy = move target 
 

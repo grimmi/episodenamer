@@ -41,6 +41,7 @@ let login =
 
 let getAuthorizedClient t =
     let client = new WebClient()
+    client.Encoding = Encoding.UTF8
     client.Headers.Set("Content-Type", "application/json")
     client.Headers.Set("Authorization", "Bearer " + t)
     client.Headers.Set("Accept-Language", "en")
