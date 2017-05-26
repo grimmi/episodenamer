@@ -98,12 +98,16 @@ let parseDate (file:string) =
 
 
 let choose (options: (int*string) seq) =
-    options
-    |> Seq.iter(fun (idx, desc) -> printfn "[%d]: %s" idx desc)
-    printf "Which option? "
-    let input = Console.ReadLine()    
-    printfn "your choice: %s" input
-    input |> int
+    match options with
+    |_ when Seq.length options = 1 -> 
+            printfn "automatically chose first option"
+            0
+    |_ ->   options
+            |> Seq.iter(fun (idx, desc) -> printfn "[%d]: %s" idx desc)
+            printf "Which option? "
+            let input = Console.ReadLine()    
+            printfn "your choice: %s" input
+            input |> int
 
 let canonizeEpisode (episode:string) = 
     (episode |> String.filter(Char.IsLetter)).ToLower()
@@ -115,8 +119,10 @@ let matchEpisode show file = async{
     let matchingEpisode = episodes.data |> Seq.tryFind(fun e -> 
         match (episodeName, date) with
         |(None, Some d) -> not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = d
-        |(Some n, _) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
-        |_ -> false)
+        |(Some n, Some d) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
+                             || not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = d
+        |(Some n, None) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
+        |(None, None) -> false)
 
     return matchingEpisode
 }
