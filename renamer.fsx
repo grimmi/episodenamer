@@ -60,6 +60,7 @@ let searchShow show = async {
             return JsonConvert.DeserializeObject<SearchResponse>(response) }
 
 let getEpisodePage show page = async{
+    printfn "lade Seite %d von '%s'" page show.seriesName
     let client = getAuthorizedClient token
     let! response = client.AsyncDownloadString(Uri(apiUrl + "/series/" + (show.id |> string) + "/episodes?page=" + (page |> string)))
     let episodeResponse = JsonConvert.DeserializeObject<EpisodeResult>(response)
@@ -67,22 +68,34 @@ let getEpisodePage show page = async{
     return episodeResponse
 }
 
-let getEpisodes show = async {
+let downloadEpisodes show = async {
+    let! firstPage = getEpisodePage show 1
+    if firstPage.links.last.HasValue && firstPage.links.last.Value > 1 then
+        let additionalEpisodes =    [ 2 .. firstPage.links.last.Value ]
+                                    |> Seq.collect(fun page ->  let pageResult = (getEpisodePage show page) |> Async.RunSynchronously
+                                                                pageResult.data)
+        let episodes = Seq.concat [firstPage.data; additionalEpisodes |> Array.ofSeq]
+        show |> cacheEpisodes episodes
+        return episodes
+     else
+        show |> cacheEpisodes firstPage.data
+        return firstPage.data |> Seq.ofArray
+}
+
+let getEpisodes show date = async {
         match tryGetEpisodes show with
         |true, episodes -> 
-                // printfn "Episode aus Cache..."
-                return episodes
-        |_ ->   let! firstPage = getEpisodePage show 1
-                if firstPage.links.last.HasValue && firstPage.links.last.Value > 1 then
-                    let additionalEpisodes =    [ 2 .. firstPage.links.last.Value ]
-                                                |> Seq.collect(fun page ->  let pageResult = (getEpisodePage show page) |> Async.RunSynchronously
-                                                                            pageResult.data)
-                    let episodes = Seq.concat [firstPage.data; additionalEpisodes |> Array.ofSeq]
-                    show |> cacheEpisodes episodes
-                    return episodes
+                let maxDate = episodes |> Seq.map(fun ep -> match DateTime.TryParse ep.firstAired with
+                                                            |(true, d) -> d
+                                                            |(false, _) -> DateTime.MinValue)
+                                       |> Seq.max
+                if maxDate < date then
+                    let! eps = downloadEpisodes show
+                    return eps
                 else
-                    show |> cacheEpisodes firstPage.data
-                    return firstPage.data |> Seq.ofArray
+                    return episodes
+        |_ ->   let! episodes = downloadEpisodes show
+                return episodes
 }
 
 let choose (options: (int*string) seq) =
@@ -102,7 +115,7 @@ let canonizeEpisode (episode:string) =
 
 let matchEpisode show file = async{
     let date = parseDate file
-    let! episodes = getEpisodes show
+    let! episodes = getEpisodes show date.Value
     let episodeName = parseEpisodeName file
     let matchingEpisode = episodes |> Seq.tryFind(fun e -> 
         match (episodeName, date) with
@@ -151,7 +164,8 @@ let findEpisode file postprocess = async {
     let! show = findShow parsedName
     match show with
     |None -> printfn "Keine Show gefunden! ('%s')" file
-    |Some s ->  let! episode = matchEpisode s file
+    |Some s ->  loadEpisodes s
+                let! episode = matchEpisode s file
                 match episode with
                 | None -> printfn "Episode konnte nicht zugeordnet werden"
                 | Some ep -> 
@@ -169,26 +183,28 @@ let move newdir file show ep =
     let validName = epName |> String.filter(fun c -> (Path.GetInvalidFileNameChars() |> Seq.contains c))
     let newPath = Path.Combine(newdir, epName + ".avi")
     printfn "copying '%s' to '%s'" file newPath
-    File.Copy(file, newPath, true)
+    // File.Copy(file, newPath, true)
 
 let postCopy = move target 
 
-let decoderOptions = OtrBatchDecoder.DecoderOptions()
-decoderOptions.AutoCut <- true
-decoderOptions.ContinueWithoutCutlist <- true
-decoderOptions.CreateDirectories <- true
-decoderOptions.DecoderPath <- @"Z:\Downloads\OTR\DecoderCLI\otrdecoder.exe"
-decoderOptions.Email <- File.ReadAllLines("./otrcredentials.cred").[0].Split('=').[1]
-decoderOptions.FileExtensions <- [|".otrkey"|]
-decoderOptions.ForceOverwrite <- true
-decoderOptions.InputDirectory <- @"Z:\Downloads\fstest"
-decoderOptions.OutputDirectory <- @"Z:\Downloads\fstest\fsdecoded"
-decoderOptions.Password <- File.ReadAllLines("./otrcredentials.cred").[1].Split('=').[1]
+// let decoderOptions = OtrBatchDecoder.DecoderOptions()
+// decoderOptions.AutoCut <- true
+// decoderOptions.ContinueWithoutCutlist <- true
+// decoderOptions.CreateDirectories <- true
+// decoderOptions.DecoderPath <- @"Z:\Downloads\OTR\DecoderCLI\otrdecoder.exe"
+// decoderOptions.Email <- File.ReadAllLines("./otrcredentials.cred").[0].Split('=').[1]
+// decoderOptions.FileExtensions <- [|".otrkey"|]
+// decoderOptions.ForceOverwrite <- true
+// decoderOptions.InputDirectory <- @"Z:\Downloads\fstest"
+// decoderOptions.OutputDirectory <- @"Z:\Downloads\fstest\fsdecoded"
+// decoderOptions.Password <- File.ReadAllLines("./otrcredentials.cred").[1].Split('=').[1]
 
-let decoder = OtrBatchDecoder()
-let decoded = decoder.Decode decoderOptions
+// let decoder = OtrBatchDecoder()
+// let decoded = decoder.Decode decoderOptions
 
-let files = decoded
+// let files = decoded
+
+let files = Directory.GetFiles(@"z:\downloads\fstest", "*.otrkey")
 
 for ep in files |> Seq.sort do
     (findEpisode ep postCopy) |> Async.RunSynchronously
