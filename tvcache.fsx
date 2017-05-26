@@ -22,7 +22,7 @@ let deserializeShow (line: string) =
     (parsedName, { id = values.[1].Trim() |> int; seriesName = values.[0].Trim(); aliases = [|""|]})
 
 let fillShowCache =
-    File.ReadAllLines("./shows.map")
+    File.ReadAllLines("./shows.mapping")
     |> Seq.filter(fun line -> line |> String.length > 0)
     |> Seq.map deserializeShow
     |> Seq.iter(fun (key, show) -> showMap.[key] <- show)
@@ -30,5 +30,5 @@ let fillShowCache =
 let cacheShow parsedName foundShow = 
     showMap.[parsedName] <- foundShow
     let mapping = sprintf "%s -> %s *** %d" parsedName foundShow.seriesName foundShow.id
-    if not (File.ReadAllLines("./shows.map") |> Seq.exists(fun line -> line = mapping)) then
-        File.AppendAllText("./shows.map", Environment.NewLine + mapping)
+    if not (File.ReadAllLines("./shows.mapping") |> Seq.exists(fun line -> line = mapping)) then
+        File.AppendAllText("./shows.mapping", Environment.NewLine + mapping)
