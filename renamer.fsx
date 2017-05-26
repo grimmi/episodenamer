@@ -148,11 +148,23 @@ let matchEpisode show file = async{
     return matchingEpisode
 }
 
+let deserializeShow (line: string) = 
+    let parts = line.Split([|"->"|], StringSplitOptions.RemoveEmptyEntries)
+    let parsedName = parts.[0].Trim()
+    let values = parts.[1].Split([|"***"|], StringSplitOptions.RemoveEmptyEntries)
+    (parsedName, { id = values.[1].Trim() |> int; seriesName = values.[0].Trim(); aliases = [|""|]})
+
+
+let fillShowCache =
+    File.ReadAllLines("./shows.map")
+    |> Seq.map deserializeShow
+    |> Seq.iter(fun (key, show) -> showMap.[key] <- show)
+
 let cacheShow parsedName foundShow = 
     showMap.[parsedName] <- foundShow
-    let mapping = sprintf "%s -> %s" parsedName foundShow.seriesName
+    let mapping = sprintf "%s -> %s *** %d" parsedName foundShow.seriesName foundShow.id
     if not (File.ReadAllLines("./shows.map") |> Seq.exists(fun line -> line = mapping)) then
-        File.AppendAllText("./shows.map", (sprintf "%s -> %s" parsedName foundShow.seriesName))
+        File.AppendAllText("./shows.map", mapping + Environment.NewLine)
 
 let rec findShow showName = async {
     try
@@ -166,7 +178,8 @@ let rec findShow showName = async {
                                     cacheShow name chosenShow      
                                     return Some(chosenShow)
     with
-        | :? WebException as ex ->  printfn "Unbekannte Show, bitte Namen eingeben:"
+        | :? WebException as ex ->  printfn "Konnte zu '%s' keine Show ermitteln" showName.Value
+                                    printfn "Unbekannte Show, bitte Namen eingeben:"
                                     let newShowName = Console.ReadLine()
                                     if newShowName <> "x" then
                                         let! nextShow = findShow(Some(newShowName))
@@ -176,6 +189,7 @@ let rec findShow showName = async {
 }
 
 let findEpisode file = async {
+    fillShowCache
     let! loggedIn = login
     token <- loggedIn
     let parsedName = file |> parseShowName
