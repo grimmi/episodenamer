@@ -157,6 +157,7 @@ let deserializeShow (line: string) =
 
 let fillShowCache =
     File.ReadAllLines("./shows.map")
+    |> Seq.filter(fun line -> line |> String.length > 0)
     |> Seq.map deserializeShow
     |> Seq.iter(fun (key, show) -> showMap.[key] <- show)
 
@@ -164,14 +165,16 @@ let cacheShow parsedName foundShow =
     showMap.[parsedName] <- foundShow
     let mapping = sprintf "%s -> %s *** %d" parsedName foundShow.seriesName foundShow.id
     if not (File.ReadAllLines("./shows.map") |> Seq.exists(fun line -> line = mapping)) then
-        File.AppendAllText("./shows.map", mapping + Environment.NewLine)
+        File.AppendAllText("./shows.map", Environment.NewLine + mapping)
 
 let rec findShow showName =
 
     let rec findShowInDb original current = async{
         try
             match showMap.TryGetValue current with
-            |true, mappedShow -> return Some(mappedShow)
+            |true, mappedShow -> 
+                            printfn "Nehme Show aus Cache: %s" mappedShow.seriesName
+                            return Some(mappedShow)
             |false, _ ->    let! shows = searchShow current
                             let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
                             let chosenShow = shows.data.[chosenIdx]
