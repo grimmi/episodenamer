@@ -1,4 +1,5 @@
 #r "packages/Newtonsoft.Json/lib/net45/Newtonsoft.Json.dll"
+#r "OtrBatchDecoder.dll"
 #load "showparser.fsx"
 #load "types.fsx"
 #load "tvcache.fsx"
@@ -15,6 +16,7 @@ open Newtonsoft.Json
 open TvCache
 open Parser
 open Types
+open OtrBatchDecoder
 
 let mutable apikey = ""
 let mutable user = ""
@@ -67,7 +69,9 @@ let getEpisodePage show page = async{
 
 let getEpisodes show = async {
         match tryGetEpisodes show with
-        |true, episodes -> return episodes
+        |true, episodes -> 
+                // printfn "Episode aus Cache..."
+                return episodes
         |_ ->   let! firstPage = getEpisodePage show 1
                 if firstPage.links.last.HasValue && firstPage.links.last.Value > 1 then
                     let additionalEpisodes =    [ 2 .. firstPage.links.last.Value ]
@@ -80,11 +84,6 @@ let getEpisodes show = async {
                     show |> cacheEpisodes firstPage.data
                     return firstPage.data |> Seq.ofArray
 }
-
-let files = [|  "Marvel_s_Agents_of_S_H_I_E_L_D___The_Bridge_13.12.10_20-00_uswabc_61_TVOON_DE.mpg.HQ.avi";
-                "The_Simpsons__Dogtown_17.05.21_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
-                "The_Simpsons__Moho_House_17.05.07_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
-                "Doctor_Who_17.05.06_19-20_ukbbc_45_TVOON_DE.mpg.HQ.avi" |]
 
 let choose (options: (int*string) seq) =
     match options with
@@ -122,7 +121,7 @@ let rec findShow showName =
         try
             match tryGetShow current with
             |true, mappedShow -> 
-                            printfn "Nehme Show aus Cache: %s" mappedShow.seriesName
+                            //printfn "Nehme Show aus Cache: %s" mappedShow.seriesName
                             return Some(mappedShow)
             |false, _ ->    let! shows = searchShow current
                             let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
@@ -144,21 +143,52 @@ let rec findShow showName =
     |Some n -> findShowInDb n n
 
 
-let findEpisode file = async {
+let findEpisode file postprocess = async {
     fillShowCache
     let! loggedIn = login
     token <- loggedIn
     let parsedName = file |> parseShowName
     let! show = findShow parsedName
     match show with
-    |None -> printfn "Keine Show gefunden!"
+    |None -> printfn "Keine Show gefunden! ('%s')" file
     |Some s ->  let! episode = matchEpisode s file
                 match episode with
                 | None -> printfn "Episode konnte nicht zugeordnet werden"
                 | Some ep -> 
-                    let info = sprintf "%s %dx%d %s" s.seriesName ep.airedSeason.Value ep.airedEpisodeNumber.Value ep.episodeName
+                    let info = sprintf "%s %02dx%02d %s" s.seriesName ep.airedSeason.Value ep.airedEpisodeNumber.Value ep.episodeName
                     printfn "%s" info
+                    postprocess file s ep
 }
 
-for ep in files do
-    findEpisode ep |> Async.RunSynchronously
+let target = "z:\\downloads\\temp"
+let move newdir file show ep =
+    if not (Directory.Exists newdir) then
+        (Directory.CreateDirectory newdir) |> ignore
+
+    let epName = sprintf "%s %02dx%02d %s" show.seriesName ep.airedSeason.Value ep.airedEpisodeNumber.Value ep.episodeName
+    let validName = epName |> String.filter(fun c -> (Path.GetInvalidFileNameChars() |> Seq.contains c))
+    let newPath = Path.Combine(newdir, epName + ".avi")
+    printfn "copying '%s' to '%s'" file newPath
+    File.Copy(file, newPath, true)
+
+let postCopy = move target 
+
+let decoderOptions = OtrBatchDecoder.DecoderOptions()
+decoderOptions.AutoCut <- true
+decoderOptions.ContinueWithoutCutlist <- true
+decoderOptions.CreateDirectories <- true
+decoderOptions.DecoderPath <- @"Z:\Downloads\OTR\DecoderCLI\otrdecoder.exe"
+decoderOptions.Email <- File.ReadAllLines("./otrcredentials.cred").[0].Split('=').[1]
+decoderOptions.FileExtensions <- [|".otrkey"|]
+decoderOptions.ForceOverwrite <- true
+decoderOptions.InputDirectory <- @"Z:\Downloads\fstest"
+decoderOptions.OutputDirectory <- @"Z:\Downloads\fstest\fsdecoded"
+decoderOptions.Password <- File.ReadAllLines("./otrcredentials.cred").[1].Split('=').[1]
+
+let decoder = OtrBatchDecoder()
+let decoded = decoder.Decode decoderOptions
+
+let files = decoded
+
+for ep in files |> Seq.sort do
+    (findEpisode ep postCopy) |> Async.RunSynchronously
