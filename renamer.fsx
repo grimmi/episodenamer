@@ -2,6 +2,7 @@
 
 
 open System
+open System.Collections.Generic
 open System.Globalization
 open System.IO
 open System.Net
@@ -18,14 +19,16 @@ type Show = { aliases: string[]; id: int; seriesName: string }
 type SearchResponse = { data: Show[] }
 type Links = { first: Nullable<int>; last: Nullable<int>; next: Nullable<int>; prev: Nullable<int> }
 type Episode = { absoluteNumber: Nullable<int>; airedEpisodeNumber: Nullable<int>; airedSeason: Nullable<int>; episodeName: string; firstAired: string }
-type EpisodeResult = { data: Episode[] }
+type EpisodeResult = { links: Links; data: Episode[] }
 
+let showMap = Dictionary<string, Show>()
+let showEpisodes = Dictionary<Show, Episode seq>()
 
 let extractValue (line:string) = 
     (line.Split '=').[1].Trim()
 
 let readcredentials = 
-    match File.ReadAllLines("./credentials.cred") with
+    match File.ReadAllLines("./credentials.cred") |> Array.take 3 with
     |[|keyline;userline;pwline|] ->
         apikey <- keyline |> extractValue
         user <- userline |> extractValue
@@ -57,11 +60,29 @@ let searchShow show = async {
             let! response = client.AsyncDownloadString(Uri(apiUrl + "/search/series?name=" + show))
             return JsonConvert.DeserializeObject<SearchResponse>(response) }
 
-let getEpisodes show = async {
-        let client = getAuthorizedClient token
-        let! response = client.AsyncDownloadString(Uri(apiUrl + "/series/" + (show.id |> string) + "/episodes"))
+let getEpisodePage show page = async{
+    let client = getAuthorizedClient token
+    let! response = client.AsyncDownloadString(Uri(apiUrl + "/series/" + (show.id |> string) + "/episodes?page=" + (page |> string)))
+    let episodeResponse = JsonConvert.DeserializeObject<EpisodeResult>(response)
 
-        return JsonConvert.DeserializeObject<EpisodeResult>(response) }
+    return episodeResponse
+}
+
+let getEpisodes show = async {
+        match showEpisodes.TryGetValue show with
+        |true, episodes -> return episodes
+        |_ ->   let! firstPage = getEpisodePage show 1
+                if firstPage.links.last.HasValue && firstPage.links.last.Value > 1 then
+                    let additionalEpisodes =    [ 2 .. firstPage.links.last.Value ]
+                                                |> Seq.collect(fun page ->  let pageResult = (getEpisodePage show page) |> Async.RunSynchronously
+                                                                            pageResult.data)
+                    let episodes = Seq.concat [firstPage.data; additionalEpisodes |> Array.ofSeq]
+                    showEpisodes.[show] <- episodes
+                    return episodes
+                else
+                    showEpisodes.[show] <- firstPage.data
+                    return firstPage.data |> Seq.ofArray
+}
 
 let files = [|  "Marvel_s_Agents_of_S_H_I_E_L_D___The_Bridge_13.12.10_20-00_uswabc_61_TVOON_DE.mpg.HQ.avi";
                 "The_Simpsons__Dogtown_17.05.21_20-00_uswnyw_30_TVOON_DE.mpg.HQ.avi";
@@ -116,7 +137,7 @@ let matchEpisode show file = async{
     let date = parseDate file
     let! episodes = getEpisodes show
     let episodeName = parseEpisodeName file
-    let matchingEpisode = episodes.data |> Seq.tryFind(fun e -> 
+    let matchingEpisode = episodes |> Seq.tryFind(fun e -> 
         match (episodeName, date) with
         |(None, Some d) -> not (isNull e.firstAired) && e.firstAired.Length > 0 && DateTime.Parse(e.firstAired) = d
         |(Some n, Some d) -> (canonizeEpisode n) = (canonizeEpisode e.episodeName)
@@ -127,13 +148,23 @@ let matchEpisode show file = async{
     return matchingEpisode
 }
 
+let cacheShow parsedName foundShow = 
+    showMap.[parsedName] <- foundShow
+    let mapping = sprintf "%s -> %s" parsedName foundShow.seriesName
+    if not (File.ReadAllLines("./shows.map") |> Seq.exists(fun line -> line = mapping)) then
+        File.AppendAllText("./shows.map", (sprintf "%s -> %s" parsedName foundShow.seriesName))
+
 let rec findShow showName = async {
     try
         match showName with 
         |None -> return None
-        |Some name -> let! shows = searchShow name
-                      let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
-                      return Some(shows.data.[chosenIdx])
+        |Some name -> match showMap.TryGetValue name with
+                      |true, mappedShow -> return Some(mappedShow)
+                      |false, _ ->  let! shows = searchShow name
+                                    let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
+                                    let chosenShow = shows.data.[chosenIdx]
+                                    cacheShow name chosenShow      
+                                    return Some(chosenShow)
     with
         | :? WebException as ex ->  printfn "Unbekannte Show, bitte Namen eingeben:"
                                     let newShowName = Console.ReadLine()
