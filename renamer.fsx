@@ -166,27 +166,31 @@ let cacheShow parsedName foundShow =
     if not (File.ReadAllLines("./shows.map") |> Seq.exists(fun line -> line = mapping)) then
         File.AppendAllText("./shows.map", mapping + Environment.NewLine)
 
-let rec findShow showName = async {
-    try
-        match showName with 
-        |None -> return None
-        |Some name -> match showMap.TryGetValue name with
-                      |true, mappedShow -> return Some(mappedShow)
-                      |false, _ ->  let! shows = searchShow name
-                                    let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
-                                    let chosenShow = shows.data.[chosenIdx]
-                                    cacheShow name chosenShow      
-                                    return Some(chosenShow)
-    with
-        | :? WebException as ex ->  printfn "Konnte zu '%s' keine Show ermitteln" showName.Value
-                                    printfn "Unbekannte Show, bitte Namen eingeben:"
-                                    let newShowName = Console.ReadLine()
-                                    if newShowName <> "x" then
-                                        let! nextShow = findShow(Some(newShowName))
-                                        return nextShow
-                                    else
-                                        return None
-}
+let rec findShow showName =
+
+    let rec findShowInDb original current = async{
+        try
+            match showMap.TryGetValue current with
+            |true, mappedShow -> return Some(mappedShow)
+            |false, _ ->    let! shows = searchShow current
+                            let chosenIdx = choose (shows.data |> Seq.mapi(fun idx show -> (idx, show.seriesName)))
+                            let chosenShow = shows.data.[chosenIdx]
+                            cacheShow original chosenShow      
+                            return Some(chosenShow)
+        with
+            | :? WebException as ex ->  printfn "Konnte zu '%s' keine Show ermitteln" current
+                                        printfn "Unbekannte Show, bitte Namen eingeben:"
+                                        let newShowName = Console.ReadLine()
+                                        if newShowName <> "x" then
+                                            let! nextShow = findShowInDb original newShowName
+                                            return nextShow
+                                        else
+                                            return None
+    }
+    match showName with
+    |None -> async { return  None }
+    |Some n -> findShowInDb n n
+
 
 let findEpisode file = async {
     fillShowCache
