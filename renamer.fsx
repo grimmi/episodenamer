@@ -88,35 +88,42 @@ let cp newdir file show ep =
     
 
     let epName = sprintf "%s %02dx%02d %s" show.seriesName ep.airedSeason.Value ep.airedEpisodeNumber.Value ep.episodeName
-    let validName = epName |> String.filter(fun c -> (Path.GetInvalidFileNameChars() |> Seq.contains c))
+    let validName = epName |> String.map(fun c -> 
+        match (Path.GetInvalidFileNameChars() |> Seq.contains c) with
+        |true -> '_'
+        |_ -> c)
     let newPath = Path.Combine(newdir, show.seriesName, epName + ".avi")
 
     if not (Directory.Exists(Path.GetDirectoryName(newPath))) then
         (Directory.CreateDirectory(Path.GetDirectoryName(newPath))) |> ignore
 
-    printfn "moving '%s' to '%s'" file newPath
-    File.Move(file, newPath)
+    if File.Exists newPath then
+        printfn "file already exists, moving '%s' to '%s'" file (newPath + "_2")
+        File.Move(file, newPath + "_2")
+    else
+        printfn "moving '%s' to '%s'" file newPath
+        File.Move(file, newPath)
 
-let decoderOptions = OtrBatchDecoder.DecoderOptions()
-decoderOptions.AutoCut <- true
-decoderOptions.ContinueWithoutCutlist <- true
-decoderOptions.CreateDirectories <- true
-decoderOptions.DecoderPath <- @"Z:\Downloads\OTR\DecoderCLI\otrdecoder.exe"
-decoderOptions.Email <- File.ReadAllLines("./otrcredentials.cred").[0].Split('=').[1]
-decoderOptions.FileExtensions <- [|".otrkey"|]
-decoderOptions.ForceOverwrite <- true
-decoderOptions.InputDirectory <- @"Z:\Downloads"
-decoderOptions.OutputDirectory <- @"Z:\Downloads\fsdecoded"
-decoderOptions.Password <- File.ReadAllLines("./otrcredentials.cred").[1].Split('=').[1]
+// let decoderOptions = OtrBatchDecoder.DecoderOptions()
+// decoderOptions.AutoCut <- true
+// decoderOptions.ContinueWithoutCutlist <- true
+// decoderOptions.CreateDirectories <- true
+// decoderOptions.DecoderPath <- @"Z:\Downloads\OTR\DecoderCLI\otrdecoder.exe"
+// decoderOptions.Email <- File.ReadAllLines("./otrcredentials.cred").[0].Split('=').[1]
+// decoderOptions.FileExtensions <- [|".otrkey"|]
+// decoderOptions.ForceOverwrite <- true
+// decoderOptions.InputDirectory <- @"Z:\Downloads"
+// decoderOptions.OutputDirectory <- @"Z:\Downloads\fsdecoded"
+// decoderOptions.Password <- File.ReadAllLines("./otrcredentials.cred").[1].Split('=').[1]
 
-let decoder = OtrBatchDecoder()
-let files = decoder.Decode decoderOptions
+// let decoder = OtrBatchDecoder()
+// let files = decoder.Decode decoderOptions
 
 let target = "z:\\downloads\\target\\fstest"
 let postCopy = cp target 
 
 login
-// let files = Directory.GetFiles(@"z:\downloads\fstest\fsdecoded", "*.avi")
+let files = Directory.GetFiles(@"z:\downloads\fsdecoded", "*.avi")
 
 for ep in files |> Seq.sort do
     (findEpisode ep postCopy) |> Async.RunSynchronously
