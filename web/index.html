@@ -1,0 +1,25 @@
+<html>
+    <head>
+            <link rel="stylesheet" href="css/uikit.min.css" />
+            <script src="js/jquery.js"></script>
+            <script src="js/uikit.min.js"></script>
+            <script src="js/uikit-icons.min.js"></script>
+    </head>
+    <body>
+        <div class="uk-container">
+            <h1>OTR Manager</h1>
+            <input type="text" style="width:20em"/><button class="uk-button uk-button-primary uk-button-small" style="margin-left:20px">Dateien laden</button>
+            <div class="uk-section-muted uk-overflow-auto">
+                <h2 class="uk-heading-divider">Dekodieren</h2>
+                <table class="uk-table uk-table-small uk-table-hover">
+                    <tr><th>Dekodieren</th><th>Dateiname</th></tr>
+                    <tr><td><input type="checkbox"/></td><td>Doctor_Who_17.05.19-19_00-bbc.avi.otrkey</td></tr>
+                </table>
+                <div uk-grid class="uk-grid-small">
+                    <div><button class="uk-button uk-button-primary">Markierte Dateien dekodieren</button></div>
+                    <div><button class="uk-button uk-button-primary">Alle Dateien dekodieren</button></div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
