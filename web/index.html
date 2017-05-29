@@ -1,25 +1,131 @@
 <html>
-    <head>
-            <link rel="stylesheet" href="css/uikit.min.css" />
-            <script src="js/jquery.js"></script>
-            <script src="js/uikit.min.js"></script>
-            <script src="js/uikit-icons.min.js"></script>
-    </head>
-    <body>
-        <div class="uk-container">
-            <h1>OTR Manager</h1>
-            <input type="text" style="width:20em"/><button class="uk-button uk-button-primary uk-button-small" style="margin-left:20px">Dateien laden</button>
-            <div class="uk-section-muted uk-overflow-auto">
-                <h2 class="uk-heading-divider">Dekodieren</h2>
-                <table class="uk-table uk-table-small uk-table-hover">
-                    <tr><th>Dekodieren</th><th>Dateiname</th></tr>
-                    <tr><td><input type="checkbox"/></td><td>Doctor_Who_17.05.19-19_00-bbc.avi.otrkey</td></tr>
-                </table>
-                <div uk-grid class="uk-grid-small">
-                    <div><button class="uk-button uk-button-primary">Markierte Dateien dekodieren</button></div>
-                    <div><button class="uk-button uk-button-primary">Alle Dateien dekodieren</button></div>
+
+<head>
+    <!--Import Google Icon Font-->
+    <link href="http://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!--Import materialize.css-->
+    <link type="text/css" rel="stylesheet" href="./materialize/css/materialize.min.css" media="screen,projection" />
+    <!--Let browser know website is optimized for mobile-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+
+<body>
+    <!--Import jQuery before materialize.js-->
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script type="text/javascript" src="./materialize/js/materialize.min.js"></script>
+    <div class="container">
+        <h1>OTR Manager</h1>
+        <ul class="collapsible popout" data-collapsible="expandable">
+            <li>
+                <div class="collapsible-header active"><img src="./move.png" height="35px" width="35px"/><h5>Dekodieren</h5></div>
+                <div class="collapsible-body">
+                    <div class="input-field">
+                        <input placeholder="z:\downloads\otr" id="source_path" type="text" class="validate">
+                        <label for="source_path">Dateipfad angeben</label>
+                    </div>
+                    <a class="waves-effect waves-light btn">Dateien laden</a>
+                    <table class="highlight responsive-table">
+                        <tr>
+                            <th>Dekodieren</th>
+                            <th>Dateiname</th>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test1" />
+                                <label for="test1"></label>
+                            </td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi.otrkey</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test2" />
+                                <label for="test2"></label>
+                            </td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi.otrkey</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test3" />
+                                <label for="test3"></label>
+                            </td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi.otrkey</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test4" />
+                                <label for="test4"></label>
+                            </td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi.otrkey</td>
+                        </tr>
+                    </table>
+                    <div class="row">
+                        <a class="waves-effect waves-light btn col s5">Markierte Dateien dekodieren</a>
+                        <div class="col s2"></div>
+                        <a class="waves-effect waves-light btn col s5">Alle Dateien dekodieren</a>
+                    </div>
                 </div>
-            </div>
-        </div>
-    </body>
+            </li>
+            <li>
+                <div class="collapsible-header"><img src="./edit.png" height="35px" width="35px"/><h5>Benennen &amp; Verschieben</h5></div>
+                <div class="collapsible-body">
+                    <div class="input-field">
+                        <input placeholder="z:\downloads\otr" id="source_path" type="text" class="validate">
+                        <label for="source_path">Dateipfad angeben</label>
+                    </div>
+                    <a class="waves-effect waves-light btn">Dateien laden</a>
+                    <table class="highlight responsive-table">
+                        <tr>
+                            <th>Verarbeiten</th>
+                            <th>Show</th>
+                            <th>Episode</th>
+                            <th>Dateiname</th>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test21" />
+                                <label for="test21"></label>
+                            </td>
+                            <td>Doctor Who (2005)</td>
+                            <td>10x03 Extremis</td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test22" />
+                                <label for="test22"></label>
+                            </td>
+                            <td>Doctor Who (2005)</td>
+                            <td>10x03 Extremis</td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test23" />
+                                <label for="test23"></label>
+                            </td>
+                            <td>Doctor Who (2005)</td>
+                            <td>10x03 Extremis</td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="checkbox" id="test24" />
+                                <label for="test24"></label>
+                            </td>
+                            <td>Doctor Who (2005)</td>
+                            <td>10x03 Extremis</td>
+                            <td>Doctor_Who_17.05.19-19_00-bbc.avi</td>
+                        </tr>
+                    </table>
+                    <div class="row">
+                        <a class="waves-effect waves-light btn col s5">Markierte Dateien verarbeiten</a>
+                        <div class="col s2"></div>
+                        <a class="waves-effect waves-light btn col s5">Alle Dateien verarbeiten</a>
+                    </div>
+                </div>
+            </li>
+        </ul>
+    </div>
+</body>
+
 </html>
